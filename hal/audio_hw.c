@@ -3698,6 +3698,8 @@ static int out_standby(struct audio_stream *stream)
         if (do_stop) {
             stop_output_stream(out);
         }
+        // if fm is active route on selected device in UI
+        audio_extn_fm_route_on_selected_device(adev, out->devices);
         pthread_mutex_unlock(&adev->lock);
     }
     pthread_mutex_unlock(&out->lock);
@@ -4834,10 +4836,6 @@ static ssize_t out_write(struct audio_stream_out *stream, const void *buffer,
                 int16_t *src = (int16_t *)buffer;
                 int16_t *dst = (int16_t *)buffer;
 
-                LOG_ALWAYS_FATAL_IF(out->config.channels != 1 || channel_count != 2 ||
-                                    out->format != AUDIO_FORMAT_PCM_16_BIT,
-                                    "out_write called for incall music use case with wrong properties");
-
                 /*
                  * FIXME: this can be removed once audio flinger mixer supports
                  * mono output
@@ -4847,12 +4845,13 @@ static ssize_t out_write(struct audio_stream_out *stream, const void *buffer,
                  * Code below goes over each frame in the buffer and adds both
                  * L and R samples and then divides by 2 to convert to mono
                  */
-                for (size_t i = 0; i < frames ; i++, dst++, src += 2) {
-                    *dst = (int16_t)(((int32_t)src[0] + (int32_t)src[1]) >> 1);
+                if(channel_count == 2){
+                    for (size_t i = 0; i < frames ; i++, dst++, src += 2) {
+                        *dst = (int16_t)(((int32_t)src[0] + (int32_t)src[1]) >> 1);
+                    }
+                    bytes_to_write /= 2;
                 }
-                bytes_to_write /= 2;
             }
-
             ALOGVV("%s: writing buffer (%zu bytes) to pcm device", __func__, bytes);
 
             long ns = 0;
@@ -7241,8 +7240,7 @@ static int adev_update_voice_comm_input_stream(struct stream_in *in,
     bool valid_ch = audio_channel_count_from_in_mask(in->channel_mask) == 1;
 
 #ifndef COMPRESS_VOIP_ENABLED
-    if (valid_rate && valid_ch &&
-        in->dev->mode == AUDIO_MODE_IN_COMMUNICATION) {
+    if (valid_rate && valid_ch) {
         in->usecase = USECASE_AUDIO_RECORD_VOIP;
         in->config = default_pcm_config_voip_copp;
         in->config.period_size = VOIP_IO_BUF_SIZE(in->sample_rate,
@@ -7258,8 +7256,7 @@ static int adev_update_voice_comm_input_stream(struct stream_in *in,
 #else
     //XXX needed for voice_extn_compress_voip_open_input_stream
     in->config.rate = config->sample_rate;
-    if ((in->dev->mode == AUDIO_MODE_IN_COMMUNICATION ||
-         voice_extn_compress_voip_is_active(in->dev)) &&
+    if((voice_extn_compress_voip_is_active(in->dev)) &&
         (voice_extn_compress_voip_is_format_supported(in->format)) &&
         valid_rate && valid_ch) {
         voice_extn_compress_voip_open_input_stream(in);
