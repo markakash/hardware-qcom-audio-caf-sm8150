@@ -5001,6 +5001,8 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
                 snd_device = fixup_usb_headset_mic_snd_device(platform,
                                                       SND_DEVICE_IN_USB_HEADSET_MIC,
                                                       SND_DEVICE_IN_USB_HEADSET_MULTI_CHANNEL_MIC);
+            else
+                snd_device = SND_DEVICE_IN_HANDSET_MIC;
         } else {
             ALOGE("%s: Unknown output device(s) %#x", __func__, out_device);
             ALOGW("%s: Using default handset-mic", __func__);
